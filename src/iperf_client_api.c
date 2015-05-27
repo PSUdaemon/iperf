@@ -122,7 +122,7 @@ create_client_timers(struct iperf_test * test)
     test->timer = test->stats_timer = test->reporter_timer = NULL;
     if (test->duration != 0) {
 	test->done = 0;
-        test->timer = tmr_create(&now, test_timer_proc, cd, ( test->duration + test->omit ) * SEC_TO_US, 0);
+        test->timer = tmr_create(&now, test_timer_proc, cd, ( test->duration + test->omit + test->idle ) * SEC_TO_US, 0);
         if (test->timer == NULL) {
             i_errno = IEINITTEST;
             return -1;
@@ -188,6 +188,49 @@ create_client_omit_timer(struct iperf_test * test)
     return 0;
 }
 
+static void
+client_idle_timer_proc(TimerClientData client_data, struct timeval *nowP)
+{
+    struct iperf_test *test = client_data.p;
+
+    test->idle_timer = NULL;
+    test->idling = 0;
+    iperf_reset_stats(test);
+    if (test->verbose && !test->json_output && test->reporter_interval == 0)
+        iprintf(test, "%s", report_idle_done);
+
+    /* Reset the timers. */
+    if (test->stats_timer != NULL)
+        tmr_reset(nowP, test->stats_timer);
+    if (test->reporter_timer != NULL)
+        tmr_reset(nowP, test->reporter_timer);
+}
+
+static int
+create_client_idle_timer(struct iperf_test * test)
+{
+    struct timeval now;
+    TimerClientData cd;
+
+    if (test->idle == 0) {
+	test->idle_timer = NULL;
+        test->idling = 0;
+    } else {
+	if (gettimeofday(&now, NULL) < 0) {
+	    i_errno = IEINITTEST;
+	    return -1;
+	}
+	test->idling = 1;
+	cd.p = test;
+	test->idle_timer = tmr_create(&now, client_idle_timer_proc, cd, test->idle * SEC_TO_US, 0);
+	if (test->idle_timer == NULL) {
+	    i_errno = IEINITTEST;
+	    return -1;
+	}
+    }
+    return 0;
+}
+
 int
 iperf_handle_message_client(struct iperf_test *test)
 {
@@ -222,6 +265,8 @@ iperf_handle_message_client(struct iperf_test *test)
             if (create_client_timers(test) < 0)
                 return -1;
             if (create_client_omit_timer(test) < 0)
+                return -1;
+            if (create_client_idle_timer(test) < 0)
                 return -1;
 	    if (!test->reverse)
 		if (iperf_create_send_timers(test) < 0)
@@ -412,7 +457,7 @@ iperf_run_client(struct iperf_test * test)
             tmr_run(&now);
 
 	    /* Is the test done yet? */
-	    if ((!test->omitting) &&
+	    if ((!test->omitting) && (!test->idling) &&
 	        ((test->duration != 0 && test->done) ||
 	         (test->settings->bytes != 0 && test->bytes_sent >= test->settings->bytes) ||
 	         (test->settings->blocks != 0 && test->blocks_sent >= test->settings->blocks))) {

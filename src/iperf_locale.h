@@ -57,6 +57,7 @@ extern const char report_connected[] ;
 extern const char report_window[] ;
 extern const char report_autotune[] ;
 extern const char report_omit_done[] ;
+extern const char report_idle_done[] ;
 extern const char report_diskfile[] ;
 extern const char report_done[] ;
 extern const char report_read_lengths[] ;

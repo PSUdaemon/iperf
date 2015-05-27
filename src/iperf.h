@@ -66,6 +66,7 @@ struct iperf_interval_results
     int       cnt_error;
 
     int omitted;
+    int idled;
 #if (defined(linux) || defined(__FreeBSD__) || defined(__NetBSD__)) && \
 	defined(TCP_INFO)
     struct tcp_info tcpInfo; /* getsockopt(TCP_INFO) for Linux, {Free,Net}BSD */
@@ -207,6 +208,7 @@ struct iperf_test
     int       bind_port;                        /* --cport option */
     int       server_port;
     int       omit;                             /* duration of omit period (-O flag) */
+    int       idle;                             /* duration of idle period (--idle-conn flag) */
     int       duration;                         /* total duration of test (-t flag) */
     char     *diskfile_name;			/* -F option */
     int       affinity, server_affinity;	/* -A option */
@@ -246,11 +248,13 @@ struct iperf_test
 
     /* Interval related members */ 
     int       omitting;
+    int       idling;
     double    stats_interval;
     double    reporter_interval;
     void      (*stats_callback) (struct iperf_test *);
     void      (*reporter_callback) (struct iperf_test *);
     Timer     *omit_timer;
+    Timer     *idle_timer;
     Timer     *timer;
     int        done;
     Timer     *stats_timer;
@@ -298,6 +302,7 @@ struct iperf_test
 #define SEC_TO_US 1000000LL
 #define UDP_RATE (1024 * 1024) /* 1 Mbps */
 #define OMIT 0 /* seconds */
+#define IDLE 0 /* seconds */
 #define DURATION 10 /* seconds */
 
 #define SEC_TO_NS 1000000000LL	/* too big for enum/const on some platforms */

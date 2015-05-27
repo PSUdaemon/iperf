@@ -279,6 +279,7 @@ iperf_test_reset(struct iperf_test *test)
     test->role = 's';
     set_protocol(test, Ptcp);
     test->omit = OMIT;
+    test->idle = IDLE;
     test->duration = DURATION;
     test->diskfile_name = (char*) 0;
     test->affinity = -1;
@@ -407,6 +408,50 @@ create_server_omit_timer(struct iperf_test * test)
 }
 
 static void
+server_idle_timer_proc(TimerClientData client_data, struct timeval *nowP)
+{
+    struct iperf_test *test = client_data.p;
+
+    test->idle_timer = NULL;
+    test->idling = 0;
+    iperf_reset_stats(test);
+    if (test->verbose && !test->json_output && test->reporter_interval == 0)
+	iprintf(test, "%s", report_idle_done);
+
+    /* Reset the timers. */
+    if (test->stats_timer != NULL)
+	tmr_reset(nowP, test->stats_timer);
+    if (test->reporter_timer != NULL)
+	tmr_reset(nowP, test->reporter_timer);
+}
+
+static int
+create_server_idle_timer(struct iperf_test * test)
+{
+    struct timeval now;
+    TimerClientData cd;
+
+    if (test->idle == 0) {
+	test->idle_timer = NULL;
+	test->idling = 0;
+    } else {
+	if (gettimeofday(&now, NULL) < 0) {
+	    i_errno = IEINITTEST;
+	    return -1;
+	}
+	test->idling = 1;
+	cd.p = test;
+	test->idle_timer = tmr_create(&now, server_idle_timer_proc, cd, test->idle * SEC_TO_US, 0);
+	if (test->idle_timer == NULL) {
+	    i_errno = IEINITTEST;
+	    return -1;
+	}
+    }
+
+    return 0;
+}
+
+static void
 cleanup_server(struct iperf_test *test)
 {
     /* Close open test sockets */
@@ -425,6 +470,10 @@ cleanup_server(struct iperf_test *test)
     if (test->omit_timer != NULL) {
 	tmr_cancel(test->omit_timer);
 	test->omit_timer = NULL;
+    }
+    if (test->idle_timer != NULL) {
+	tmr_cancel(test->idle_timer);
+	test->idle_timer = NULL;
     }
 }
 
@@ -569,6 +618,10 @@ iperf_run_server(struct iperf_test *test)
                         return -1;
 		    }
 		    if (create_server_omit_timer(test) < 0) {
+			cleanup_server(test);
+                        return -1;
+		    }
+		    if (create_server_idle_timer(test) < 0) {
 			cleanup_server(test);
                         return -1;
 		    }

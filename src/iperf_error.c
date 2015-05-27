@@ -136,6 +136,9 @@ iperf_strerror(int i_errno)
         case IEOMIT:
             snprintf(errstr, len, "bogus value for --omit");
             break;
+        case IEIDLE:
+            snprintf(errstr, len, "bogus value for --idle-conn");
+            break;
         case IEUNIMP:
             snprintf(errstr, len, "an option you are trying to set is not implemented yet");
             break;

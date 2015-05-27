@@ -149,6 +149,7 @@ const char usage_longstr[] = "Usage: iperf [-s|-c host] [options]\n"
 #endif /* HAVE_FLOWLABEL */
                            "  -Z, --zerocopy            use a 'zero copy' method of sending data\n"
                            "  -O, --omit N              omit the first n seconds\n"
+                           "  --idle-conn N             idle for n seconds\n"
                            "  -T, --title str           prefix every output line with this string\n"
                            "  --get-server-output       get results from server\n"
                            "  --udp-counters-64bit      use 64-bit counters in UDP test packets\n"
@@ -223,6 +224,8 @@ const char window_default[] =
 const char wait_server_threads[] =
 "Waiting for server threads to complete. Interrupt again to force quit.\n";
 
+// Need to add idle strings here
+
 const char test_start_time[] =
 "Starting Test: protocol: %s, %d streams, %d byte blocks, omitting %d seconds, %d second test\n";
 
@@ -263,6 +266,9 @@ const char report_autotune[] =
 
 const char report_omit_done[] =
 "Finished omit period, starting real test\n";
+
+const char report_idle_done[] =
+"Finished idle period, starting real test\n";
 
 const char report_diskfile[] =
 "        Sent %s / %s (%d%%) of %s\n";
@@ -322,6 +328,8 @@ const char report_sum_bw_udp_sender_format[] =
 "[SUM] %6.2f-%-6.2f sec  %ss  %ss/sec  %d  %s\n";
 
 const char report_omitted[] = "(omitted)";
+
+const char report_idling[] = "(idling)";
 
 const char report_bw_separator[] =
 "- - - - - - - - - - - - - - - - - - - - - - - - -\n";

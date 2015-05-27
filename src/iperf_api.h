@@ -50,6 +50,7 @@ struct iperf_stream;
 #define OPT_UDP_COUNTERS_64BIT 4
 #define OPT_CLIENT_PORT 5
 #define OPT_NUMSTREAMS 6
+#define OPT_IDLE_CONN 7
 
 /* states */
 #define TEST_START 1
@@ -75,6 +76,7 @@ struct iperf_stream;
 int	iperf_get_verbose( struct iperf_test* ipt );
 int	iperf_get_control_socket( struct iperf_test* ipt );
 int	iperf_get_test_omit( struct iperf_test* ipt );
+int	iperf_get_test_idle( struct iperf_test* ipt );
 int	iperf_get_test_duration( struct iperf_test* ipt );
 char	iperf_get_test_role( struct iperf_test* ipt );
 int	iperf_get_test_reverse( struct iperf_test* ipt );
@@ -101,6 +103,7 @@ int	iperf_get_test_one_off( struct iperf_test* ipt );
 void	iperf_set_verbose( struct iperf_test* ipt, int verbose );
 void	iperf_set_control_socket( struct iperf_test* ipt, int ctrl_sck );
 void	iperf_set_test_omit( struct iperf_test* ipt, int omit );
+void	iperf_set_test_idle( struct iperf_test* ipt, int idle );
 void	iperf_set_test_duration( struct iperf_test* ipt, int duration );
 void	iperf_set_test_reporter_interval( struct iperf_test* ipt, double reporter_interval );
 void	iperf_set_test_stats_interval( struct iperf_test* ipt, double stats_interval );
@@ -287,6 +290,7 @@ enum {
     IENOSCTP = 18,	    // No SCTP support available
     IEBIND = 19,			// Local port specified with no local bind option
     IEUDPBLOCKSIZE = 20,    // Block size too large. Maximum value = %dMAX_UDP_BLOCKSIZE
+    IEIDLE = 21,            // Bogus value for --idle-conn
     /* Test errors */
     IENEWTEST = 100,        // Unable to create a new test (check perror)
     IEINITTEST = 101,       // Test initialization failed (check perror)

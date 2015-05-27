@@ -133,6 +133,12 @@ iperf_get_test_omit(struct iperf_test *ipt)
 }
 
 int
+iperf_get_test_idle(struct iperf_test *ipt)
+{
+    return ipt->idle;
+}
+
+int
 iperf_get_test_duration(struct iperf_test *ipt)
 {
     return ipt->duration;
@@ -282,6 +288,12 @@ void
 iperf_set_test_omit(struct iperf_test *ipt, int omit)
 {
     ipt->omit = omit;
+}
+
+void
+iperf_set_test_idle(struct iperf_test *ipt, int idle)
+{
+    ipt->idle = idle;
 }
 
 void
@@ -476,6 +488,7 @@ iperf_on_new_stream(struct iperf_stream *sp)
 void
 iperf_on_test_start(struct iperf_test *test)
 {
+// TODO: Add idle info here
     if (test->json_output) {
 	cJSON_AddItemToObject(test->json_start, "test_start", iperf_json_printf("protocol: %s  num_streams: %d  blksize: %d  omit: %d  duration: %d  bytes: %d  blocks: %d  reverse: %d", test->protocol->name, (int64_t) test->num_streams, (int64_t) test->settings->blksize, (int64_t) test->omit, (int64_t) test->duration, (int64_t) test->settings->bytes, (int64_t) test->settings->blocks, test->reverse?(int64_t)1:(int64_t)0));
     } else {
@@ -625,6 +638,7 @@ iperf_parse_arguments(struct iperf_test *test, int argc, char **argv)
 #endif /* HAVE_FLOWLABEL */
         {"zerocopy", no_argument, NULL, 'Z'},
         {"omit", required_argument, NULL, 'O'},
+        {"idle-conn", required_argument, NULL, OPT_IDLE_CONN},
         {"file", required_argument, NULL, 'F'},
 #if defined(HAVE_CPU_AFFINITY)
         {"affinity", required_argument, NULL, 'A'},
@@ -855,6 +869,14 @@ iperf_parse_arguments(struct iperf_test *test, int argc, char **argv)
                 test->omit = atoi(optarg);
                 if (test->omit < 0 || test->omit > 60) {
                     i_errno = IEOMIT;
+                    return -1;
+                }
+		client_flag = 1;
+                break;
+            case OPT_IDLE_CONN:
+                test->idle = atoi(optarg);
+                if (test->idle < 0 || test->idle > 60) {
+                    i_errno = IEIDLE;
                     return -1;
                 }
 		client_flag = 1;
@@ -1256,6 +1278,7 @@ send_parameters(struct iperf_test *test)
         else if (test->protocol->id == Psctp)
             cJSON_AddTrueToObject(j, "sctp");
 	cJSON_AddIntToObject(j, "omit", test->omit);
+	cJSON_AddIntToObject(j, "idle", test->idle);
 	if (test->server_affinity != -1)
 	    cJSON_AddIntToObject(j, "server_affinity", test->server_affinity);
 	if (test->duration)
@@ -1333,6 +1356,8 @@ get_parameters(struct iperf_test *test)
             set_protocol(test, Psctp);
 	if ((j_p = cJSON_GetObjectItem(j, "omit")) != NULL)
 	    test->omit = j_p->valueint;
+	if ((j_p = cJSON_GetObjectItem(j, "idle")) != NULL)
+	    test->idle = j_p->valueint;
 	if ((j_p = cJSON_GetObjectItem(j, "server_affinity")) != NULL)
 	    test->server_affinity = j_p->valueint;
 	if ((j_p = cJSON_GetObjectItem(j, "time")) != NULL)
@@ -1753,6 +1778,7 @@ iperf_defaults(struct iperf_test *testp)
 #endif /* HAVE_SCTP */
 
     testp->omit = OMIT;
+    testp->idle = IDLE;
     testp->duration = DURATION;
     testp->diskfile_name = (char*) 0;
     testp->affinity = -1;
@@ -1890,6 +1916,8 @@ iperf_free_test(struct iperf_test *test)
 	free(test->congestion);
     if (test->omit_timer != NULL)
 	tmr_cancel(test->omit_timer);
+    if (test->idle_timer != NULL)
+	tmr_cancel(test->idle_timer);
     if (test->timer != NULL)
 	tmr_cancel(test->timer);
     if (test->stats_timer != NULL)
@@ -1958,6 +1986,10 @@ iperf_reset_test(struct iperf_test *test)
 	tmr_cancel(test->omit_timer);
 	test->omit_timer = NULL;
     }
+    if (test->idle_timer != NULL) {
+	tmr_cancel(test->idle_timer);
+	test->idle_timer = NULL;
+    }
     if (test->timer != NULL) {
 	tmr_cancel(test->timer);
 	test->timer = NULL;
@@ -1979,6 +2011,7 @@ iperf_reset_test(struct iperf_test *test)
     test->sender_has_retransmits = 0;
     set_protocol(test, Ptcp);
     test->omit = OMIT;
+    test->idle = IDLE;
     test->duration = DURATION;
     test->server_affinity = -1;
 #if defined(HAVE_CPUSET_SETAFFINITY)
@@ -2019,7 +2052,7 @@ iperf_reset_test(struct iperf_test *test)
 }
 
 
-/* Reset all of a test's stats back to zero.  Called when the omitting
+/* Reset all of a test's stats back to zero.  Called when the omitting & idling
 ** period is over.
 */
 void
@@ -2065,6 +2098,7 @@ iperf_stats_callback(struct iperf_test *test)
     struct iperf_interval_results *irp, temp;
 
     temp.omitted = test->omitting;
+    temp.idled = test->idling;
     SLIST_FOREACH(sp, &test->streams, streams) {
         rp = sp->result;
 
@@ -2248,7 +2282,7 @@ iperf_print_results(struct iperf_test *test)
     struct iperf_stream *sp = NULL;
     iperf_size_t bytes_sent, total_sent = 0;
     iperf_size_t bytes_received, total_received = 0;
-    double start_time, end_time, avg_jitter = 0.0, lost_percent;
+    double start_time, end_time = 0.0, avg_jitter = 0.0, lost_percent;
     double bandwidth;
 
     /* print final summary for all intervals */
